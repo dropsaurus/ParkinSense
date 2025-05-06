@@ -5,10 +5,30 @@
 #define ARM_MATH_CM4
 #define __FPU_PRESENT 1
 
-DigitalOut led_tremor(PB_14);
+/*
+ * This program is designed for the STM32L4 Discovery IoT Node board, using the LSM6DSL 3D accelerometer.
+ * 
+ * Functionality Overview:
+ * - Continuously reads live accelerometer data via I2C from the LSM6DSL sensor.
+ * - Collects 256 samples of 3-axis acceleration, calculates the magnitude of movement.
+ * - Performs FFT (Fast Fourier Transform) on the collected data to analyze frequency components.
+ * - Based on the frequency and amplitude of motion, it detects two types of movement disorders:
+ *     - Tremor: characterized by strong frequency components in the 3–5 Hz range.
+ *     - Dyskinesia: characterized by frequencies in the 5–7 Hz range.
+ * - Uses an LED (PB_14) to indicate detection:
+ *     - Solid ON for tremor.
+ *     - Blinking for dyskinesia.
+ * - Uses another LED (PA_5) to indicate data collection is in progress.
+ * - The sampling rate is configured to 104Hz, and detection is repeated every 5 seconds.
+ */
+
+DigitalOut led_tremor(PB_14);     // LED for tremor detection
+DigitalOut led_detecting(PA_5);   // LED for data collection
+
+
 
 // I2C & Serial
-I2C i2c(PB_11, PB_10);
+I2C i2c(PB_11, PB_10);     // I2C2: SDA = PB11, SCL = PB10
 BufferedSerial pc(USBTX, USBRX, 115200);
 
 // FileHandle *mbed::mbed_override_console(int) {
@@ -16,7 +36,7 @@ BufferedSerial pc(USBTX, USBRX, 115200);
 // }
 
 // LSM6DSL
-#define LSM6DSL_I2C_ADDR  0x6A  // 7-bit 
+#define LSM6DSL_I2C_ADDR  0x6A  // 7-bit I2C address
 stmdev_ctx_t dev_ctx;
 
 // Generic I2C read/write functions
@@ -46,13 +66,13 @@ void test_fft_accelerometer() {
     printf("Initializing FFT on live accelerometer data...\n");
 
     // Setup sensor context
-    dev_ctx.write_reg = platform_write;
-    dev_ctx.read_reg = platform_read;
-    dev_ctx.handle = (void*)LSM6DSL_I2C_ADDR;
+    dev_ctx.write_reg = platform_write; // I2C write function
+    dev_ctx.read_reg = platform_read;   // I2C read function
+    dev_ctx.handle = (void*)LSM6DSL_I2C_ADDR;   // I2C address
 
-    thread_sleep_for(500);
+    thread_sleep_for(500);   // Wait for the sensor to stabilize
 
-    uint8_t whoami = 0;
+    uint8_t whoami = 0;  // used to check device ID
     if (lsm6dsl_device_id_get(&dev_ctx, &whoami) != 0 || whoami != 0x6A) {
         printf("Device not found or ID mismatch. WHO_AM_I = 0x%X\n", whoami);
         return;
@@ -68,7 +88,8 @@ void test_fft_accelerometer() {
     lsm6dsl_xl_full_scale_set(&dev_ctx, LSM6DSL_2g);
 
     // Collect SAMPLE_SIZE samples of Z-axis data
-    printf("Collecting %d samples...\n", SAMPLE_SIZE);
+    printf("Collecting %d samples...\n", SAMPLE_SIZE);  // Start collecting data
+    led_detecting = 1;
     int collected = 0;
     while (collected < SAMPLE_SIZE) {
         lsm6dsl_status_reg_t status;
@@ -84,6 +105,7 @@ void test_fft_accelerometer() {
         }
         thread_sleep_for(10);
     }
+    led_detecting = 0;
 
     // Perform FFT
     arm_rfft_fast_instance_f32 fft_instance;
@@ -137,11 +159,11 @@ void analyze_motion(const float* magnitudes, int sample_size, float sampling_rat
     if (tremor_count >= 2) {
         printf("Tremor Detected\n");
         led_tremor = 1;
-        thread_sleep_for(1000);
-        led_tremor = 0;
+        thread_sleep_for(5000);
+        led_tremor = 0;     
     } else if (dyskinesia_count >= 3) {
         printf("Dyskinesia Detected\n");
-        for (int i = 0; i < 6; i++) {
+        for (int i = 0; i < 25; i++) {
             led_tremor = !led_tremor;
             thread_sleep_for(200);
         }
@@ -159,6 +181,6 @@ int main() {
 
     while (1) {
         test_fft_accelerometer();          
-        thread_sleep_for(4000);             // test every 4 seconds
+        thread_sleep_for(5000);             // test every 5 seconds
     }
 }
