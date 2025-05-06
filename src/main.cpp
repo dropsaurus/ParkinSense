@@ -38,7 +38,8 @@ void analyze_motion(const float* magnitudes, int sample_size, float sampling_rat
 
 void test_fft_accelerometer() {
     constexpr int SAMPLE_SIZE = 256;
-    float32_t accel_z[SAMPLE_SIZE];
+    // float32_t accel_z[SAMPLE_SIZE];
+    float32_t accel_magnitude[SAMPLE_SIZE];
     float32_t output[2 * SAMPLE_SIZE];
     int16_t data_raw[3];
 
@@ -74,7 +75,11 @@ void test_fft_accelerometer() {
         lsm6dsl_status_reg_get(&dev_ctx, &status);
         if (status.xlda) {
             lsm6dsl_acceleration_raw_get(&dev_ctx, data_raw);
-            accel_z[collected] = lsm6dsl_from_fs2g_to_mg(data_raw[2]) / 1000.0f;
+            // accel_z[collected] = lsm6dsl_from_fs2g_to_mg(data_raw[2]) / 1000.0f;
+            float x = lsm6dsl_from_fs2g_to_mg(data_raw[0]) / 1000.0f;
+            float y = lsm6dsl_from_fs2g_to_mg(data_raw[1]) / 1000.0f;
+            float z = lsm6dsl_from_fs2g_to_mg(data_raw[2]) / 1000.0f;
+            accel_magnitude[collected] = sqrtf(x * x + y * y + z * z);
             collected++;
         }
         thread_sleep_for(10);
@@ -87,7 +92,7 @@ void test_fft_accelerometer() {
         return;
     }
 
-    arm_rfft_fast_f32(&fft_instance, accel_z, output, 0);
+    arm_rfft_fast_f32(&fft_instance, accel_magnitude, output, 0);
 
     printf("FFT Magnitudes (first half):\n");
     for (int i = 0; i < SAMPLE_SIZE / 2; i++) {
@@ -113,8 +118,8 @@ void analyze_motion(const float* magnitudes, int sample_size, float sampling_rat
     float frequency_resolution = sampling_rate / sample_size;
 
     // Thresholds (tunable based on real-world tests)
-    float tremor_threshold = 30.0f;
-    float dyskinesia_threshold = 20.0f;
+    float tremor_threshold = 14.0f;
+    float dyskinesia_threshold = 15.0f;
     int tremor_count = 0;
     int dyskinesia_count = 0;
 
@@ -122,19 +127,19 @@ void analyze_motion(const float* magnitudes, int sample_size, float sampling_rat
         float freq = i * frequency_resolution;
         float amp = magnitudes[i];
 
-        if (freq >= 4.0f && freq <= 12.0f && amp >= tremor_threshold) {
+        if (freq >= 3.0f && freq <= 5.0f && amp >= tremor_threshold) {   // 3-5 Hz
             tremor_count++;
-        } else if (freq > 1.0f && amp >= dyskinesia_threshold) {
+        } else if (freq > 5.0f && freq <= 7.0f && amp >= dyskinesia_threshold) {    // 5-7 Hz
             dyskinesia_count++;
         }
     }
 
-    if (tremor_count >= 3) {
+    if (tremor_count >= 2) {
         printf("Tremor Detected\n");
         led_tremor = 1;
         thread_sleep_for(1000);
         led_tremor = 0;
-    } else if (dyskinesia_count >= 5) {
+    } else if (dyskinesia_count >= 3) {
         printf("Dyskinesia Detected\n");
         for (int i = 0; i < 6; i++) {
             led_tremor = !led_tremor;
