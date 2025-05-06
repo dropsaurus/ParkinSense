@@ -22,6 +22,30 @@ This project aims to detect and classify abnormal hand movements in Parkinson’
 | Tremor       | 3–5 Hz           | Indicates “Off” state               |
 | Dyskinesia   | 5–7 Hz           | Indicates excessive dopamine levels |
 
+## ⚙️ How It Works
+
+### 1. **Data Collection**
+- The onboard accelerometer samples motion data at a fixed rate of **104 Hz**.
+- A total of **256 samples** are collected, representing approximately **2.46 seconds** of motion data.
+- For each sample, the **magnitude of acceleration** is calculated as `sqrt(x^2 + y^2 + z^2)` to combine the X, Y, and Z axis data.
+
+### 2. **Frequency Analysis**
+- The collected data is processed using a **Fast Fourier Transform (FFT)** to convert the time-domain signal into the frequency domain.
+- Only the **first half** of the FFT output is analyzed, as the second half is symmetric for real-valued input signals.
+- The **frequency resolution** is calculated as `frequency_resolution = sampling_rate / sample_size`, allowing each FFT bin to correspond to a specific frequency.
+
+### 3. **Motion Detection**
+- The program identifies two types of motion abnormalities based on frequency and amplitude thresholds:
+  - **Tremor**: Detected in the **3–5 Hz** frequency range if the amplitude exceeds **14.0** and at least **2 bins** meet this condition.
+  - **Dyskinesia**: Detected in the **5–7 Hz** frequency range if the amplitude exceeds **15.0** and at least **3 bins** meet this condition.
+- Detection results are indicated using onboard LEDs:
+  - **Tremor**: LED remains solid ON for 5 seconds.
+  - **Dyskinesia**: LED blinks 25 times with a 200 ms interval.
+  - **No abnormal motion**: LED remains OFF.
+
+### 4. **Real-Time Operation**
+- The detection process is repeated every **5 seconds**, providing real-time feedback on motion patterns.
+
 ## 🎯 Grading Criteria
 | Category                          | Weight |
 |----------------------------------|--------|
