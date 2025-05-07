@@ -5,6 +5,13 @@
 #define ARM_MATH_CM4
 #define __FPU_PRESENT 1
 
+constexpr int SAMPLE_SIZE = 256;  // FFT sample size
+constexpr int BUFFER_SIZE = 312; // 104Hz * 3 seconds = 312 samples
+
+static float32_t accel_magnitude[BUFFER_SIZE] = {0}; // Circular buffer for 3 seconds of data
+static float32_t fft_input[SAMPLE_SIZE];
+static float32_t output[2 * SAMPLE_SIZE];
+
 /*
  * This program is designed for the STM32L4 Discovery IoT Node board, using the LSM6DSL 3D accelerometer.
  * 
@@ -23,7 +30,7 @@
  */
 
 DigitalOut led_tremor(PB_14);     // LED for tremor detection
-DigitalOut led_detecting(PA_5);   // LED for data collection
+DigitalOut led_dyskinesia(PA_5);   // LED for dyskinesia detection
 
 
 
@@ -57,22 +64,19 @@ int32_t platform_read(void *handle, uint8_t reg, uint8_t *bufp, uint16_t len) {
 void analyze_motion(const float* magnitudes, int sample_size, float sampling_rate);
 
 void test_fft_accelerometer() {
-    constexpr int SAMPLE_SIZE = 256;
-    // float32_t accel_z[SAMPLE_SIZE];
-    float32_t accel_magnitude[SAMPLE_SIZE];
-    float32_t output[2 * SAMPLE_SIZE];
     int16_t data_raw[3];
+    int buffer_index = 0;
 
     printf("Initializing FFT on live accelerometer data...\n");
 
     // Setup sensor context
-    dev_ctx.write_reg = platform_write; // I2C write function
-    dev_ctx.read_reg = platform_read;   // I2C read function
-    dev_ctx.handle = (void*)LSM6DSL_I2C_ADDR;   // I2C address
+    dev_ctx.write_reg = platform_write;
+    dev_ctx.read_reg = platform_read;
+    dev_ctx.handle = (void*)LSM6DSL_I2C_ADDR;
 
-    thread_sleep_for(500);   // Wait for the sensor to stabilize
+    thread_sleep_for(500); // Wait for the sensor to stabilize
 
-    uint8_t whoami = 0;  // used to check device ID
+    uint8_t whoami = 0;
     if (lsm6dsl_device_id_get(&dev_ctx, &whoami) != 0 || whoami != 0x6A) {
         printf("Device not found or ID mismatch. WHO_AM_I = 0x%X\n", whoami);
         return;
@@ -87,52 +91,58 @@ void test_fft_accelerometer() {
     lsm6dsl_xl_data_rate_set(&dev_ctx, LSM6DSL_XL_ODR_104Hz);
     lsm6dsl_xl_full_scale_set(&dev_ctx, LSM6DSL_2g);
 
-    // Collect SAMPLE_SIZE samples of Z-axis data
-    printf("Collecting %d samples...\n", SAMPLE_SIZE);  // Start collecting data
-    led_detecting = 1;
-    int collected = 0;
-    while (collected < SAMPLE_SIZE) {
+    printf("Starting continuous motion detection...\n");
+
+    while (true) {
         lsm6dsl_status_reg_t status;
         lsm6dsl_status_reg_get(&dev_ctx, &status);
         if (status.xlda) {
             lsm6dsl_acceleration_raw_get(&dev_ctx, data_raw);
-            // accel_z[collected] = lsm6dsl_from_fs2g_to_mg(data_raw[2]) / 1000.0f;
             float x = lsm6dsl_from_fs2g_to_mg(data_raw[0]) / 1000.0f;
             float y = lsm6dsl_from_fs2g_to_mg(data_raw[1]) / 1000.0f;
             float z = lsm6dsl_from_fs2g_to_mg(data_raw[2]) / 1000.0f;
-            accel_magnitude[collected] = sqrtf(x * x + y * y + z * z);
-            collected++;
+            float magnitude = sqrtf(x * x + y * y + z * z);
+
+            // Update circular buffer
+            accel_magnitude[buffer_index] = magnitude;
+            buffer_index = (buffer_index + 1) % BUFFER_SIZE;
+
+            // Prepare FFT input (last SAMPLE_SIZE samples from the buffer)
+            for (int i = 0; i < SAMPLE_SIZE; i++) {
+                int index = (buffer_index + BUFFER_SIZE - SAMPLE_SIZE + i) % BUFFER_SIZE;
+
+                // 检查 index 是否越界
+                 if (index < 0 || index >= BUFFER_SIZE) {
+                    printf("Buffer index out of bounds: %d (buffer_index: %d, i: %d)\n", index, buffer_index, i);
+                    return;
+                }
+
+                fft_input[i] = accel_magnitude[index];
+            }
+
+            // Perform FFT
+            arm_rfft_fast_instance_f32 fft_instance;
+            if (arm_rfft_fast_init_f32(&fft_instance, SAMPLE_SIZE) != ARM_MATH_SUCCESS) {
+                printf("FFT initialization failed.\n");
+                return;
+            }
+
+            arm_rfft_fast_f32(&fft_instance, fft_input, output, 0);
+
+            // Calculate magnitudes
+            float magnitudes[SAMPLE_SIZE / 2];
+            for (int i = 0; i < SAMPLE_SIZE / 2; i++) {
+                float real = output[2 * i];
+                float imag = output[2 * i + 1];
+                magnitudes[i] = sqrtf(real * real + imag * imag);
+            }
+
+            // Analyze motion
+            analyze_motion(magnitudes, SAMPLE_SIZE, 104.0f);
         }
-        thread_sleep_for(10);
+
+        thread_sleep_for(10); // Sampling interval (approx. 104Hz)
     }
-    led_detecting = 0;
-
-    // Perform FFT
-    arm_rfft_fast_instance_f32 fft_instance;
-    if (arm_rfft_fast_init_f32(&fft_instance, SAMPLE_SIZE) != ARM_MATH_SUCCESS) {
-        printf("FFT initialization failed.\n");
-        return;
-    }
-
-    arm_rfft_fast_f32(&fft_instance, accel_magnitude, output, 0);
-
-    printf("FFT Magnitudes (first half):\n");
-    for (int i = 0; i < SAMPLE_SIZE / 2; i++) {
-        float real = output[2 * i];
-        float imag = output[2 * i + 1];
-        float magnitude = sqrtf(real * real + imag * imag);
-        int mag_int = (int)(magnitude * 1000);
-        printf("Bin %d: %d.%03d\n", i, mag_int / 1000, mag_int % 1000);
-    }
-
-
-    float magnitudes[SAMPLE_SIZE / 2];
-    for (int i = 0; i < SAMPLE_SIZE / 2; i++) {
-        float real = output[2 * i];
-        float imag = output[2 * i + 1];
-        magnitudes[i] = sqrtf(real * real + imag * imag);
-    }
-    analyze_motion(magnitudes, SAMPLE_SIZE, 104.0f); 
 }
 
 /*
@@ -160,6 +170,7 @@ void test_fft_accelerometer() {
  *    - The program continuously repeats the detection process every 5 seconds, providing real-time feedback on motion patterns.
  */
 
+
 void analyze_motion(const float* magnitudes, int sample_size, float sampling_rate) {
     float frequency_resolution = sampling_rate / sample_size;
 
@@ -181,30 +192,27 @@ void analyze_motion(const float* magnitudes, int sample_size, float sampling_rat
     }
 
     if (tremor_count >= 2) {
-        printf("Tremor Detected\n");
-        led_tremor = 1;
-        thread_sleep_for(5000);
-        led_tremor = 0;     
+        // printf("Tremor Detected\n");
+        led_tremor = 1; // Turn on tremor LED
+        led_dyskinesia = 0; // Turn off dyskinesia LED
     } else if (dyskinesia_count >= 3) {
-        printf("Dyskinesia Detected\n");
-        for (int i = 0; i < 25; i++) {
-            led_tremor = !led_tremor;
-            thread_sleep_for(200);
-        }
+        // printf("Dyskinesia Detected\n");
+        led_dyskinesia = 1; 
+        led_dyskinesia = 1; 
     } else {
-        printf("No abnormal motion detected\n");
-        led_tremor = 0;
+        // printf("No abnormal motion detected\n");
+        led_tremor = 0; // Turn off tremor LED
+        led_dyskinesia = 0; // Turn off dyskinesia LED
+        
     }
 }
-
-
 
 int main() {
     thread_sleep_for(1000);
     printf("FFT Start\n");
 
-    while (1) {
-        test_fft_accelerometer();          
-        thread_sleep_for(5000);             // test every 5 seconds
+    while (true) {
+        test_fft_accelerometer();
+        thread_sleep_for(10); 
     }
 }
