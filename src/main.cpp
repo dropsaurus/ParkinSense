@@ -12,27 +12,8 @@ static float32_t accel_magnitude[BUFFER_SIZE] = {0}; // Circular buffer for 3 se
 static float32_t fft_input[SAMPLE_SIZE];
 static float32_t output[2 * SAMPLE_SIZE];
 
-/*
- * This program is designed for the STM32L4 Discovery IoT Node board, using the LSM6DSL 3D accelerometer.
- * 
- * Functionality Overview:
- * - Continuously reads live accelerometer data via I2C from the LSM6DSL sensor.
- * - Collects 256 samples of 3-axis acceleration, calculates the magnitude of movement.
- * - Performs FFT (Fast Fourier Transform) on the collected data to analyze frequency components.
- * - Based on the frequency and amplitude of motion, it detects two types of movement disorders:
- *     - Tremor: characterized by strong frequency components in the 3–5 Hz range.
- *     - Dyskinesia: characterized by frequencies in the 5–7 Hz range.
- * - Uses an LED (PB_14) to indicate detection:
- *     - Solid ON for tremor.
- *     - Blinking for dyskinesia.
- * - Uses another LED (PA_5) to indicate data collection is in progress.
- * - The sampling rate is configured to 104Hz, and detection is repeated every 5 seconds.
- */
-
 DigitalOut led_tremor(PB_14);     // LED for tremor detection
 DigitalOut led_dyskinesia(PA_5);   // LED for dyskinesia detection
-
-
 
 // I2C & Serial
 I2C i2c(PB_11, PB_10);     // I2C2: SDA = PB11, SCL = PB10
@@ -111,7 +92,7 @@ void test_fft_accelerometer() {
             for (int i = 0; i < SAMPLE_SIZE; i++) {
                 int index = (buffer_index + BUFFER_SIZE - SAMPLE_SIZE + i) % BUFFER_SIZE;
 
-                // 检查 index 是否越界
+                // Check for buffer index out of bounds
                  if (index < 0 || index >= BUFFER_SIZE) {
                     printf("Buffer index out of bounds: %d (buffer_index: %d, i: %d)\n", index, buffer_index, i);
                     return;
@@ -145,31 +126,6 @@ void test_fft_accelerometer() {
     }
 }
 
-/*
- * This program collects accelerometer data from the LSM6DSL sensor to analyze motion patterns and detect abnormalities.
- * The process involves the following steps:
- * 
- * 1. **Data Collection**:
- *    - The accelerometer is configured to sample data at a fixed rate of 104 Hz.
- *    - A total of 256 samples are collected, representing approximately 2.46 seconds of motion data.
- *    - For each sample, the magnitude of acceleration is calculated as sqrt(x^2 + y^2 + z^2), combining the X, Y, and Z axis data.
- * 
- * 2. **Frequency Analysis**:
- *    - The collected data is processed using a Fast Fourier Transform (FFT) to convert the time-domain signal into the frequency domain.
- *    - Only the first half of the FFT output is analyzed, as the second half is symmetric for real-valued input signals.
- *    - The frequency resolution is calculated as `frequency_resolution = sampling_rate / sample_size`, allowing each FFT bin to be mapped to a specific frequency.
- * 
- * 3. **Motion Detection**:
- *    - The program identifies two types of motion abnormalities based on frequency and amplitude thresholds:
- *      - **Tremor**: Detected in the 3–5 Hz frequency range if the amplitude exceeds 14.0 and at least 2 bins meet this condition.
- *      - **Dyskinesia**: Detected in the 5–7 Hz frequency range if the amplitude exceeds 15.0 and at least 3 bins meet this condition.
- *    - If tremor is detected, the LED remains solid ON for 5 seconds. If dyskinesia is detected, the LED blinks 25 times with a 200 ms interval.
- *    - If no abnormal motion is detected, the LED remains OFF.
- * 
- * 4. **Real-Time Operation**:
- *    - The program continuously repeats the detection process every 5 seconds, providing real-time feedback on motion patterns.
- */
-
 
 void analyze_motion(const float* magnitudes, int sample_size, float sampling_rate) {
     float frequency_resolution = sampling_rate / sample_size;
@@ -197,7 +153,7 @@ void analyze_motion(const float* magnitudes, int sample_size, float sampling_rat
         led_dyskinesia = 0; // Turn off dyskinesia LED
     } else if (dyskinesia_count >= 3) {
         // printf("Dyskinesia Detected\n");
-        led_dyskinesia = 1; 
+        led_dyskinesia = 1;
         led_dyskinesia = 1; 
     } else {
         // printf("No abnormal motion detected\n");
