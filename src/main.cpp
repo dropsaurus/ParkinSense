@@ -15,6 +15,8 @@ static float32_t output[2 * SAMPLE_SIZE];
 DigitalOut led_tremor(PB_14);     // LED for tremor detection
 DigitalOut led_dyskinesia(PA_5);   // LED for dyskinesia detection
 
+DigitalOut led_strong(PC_9);    // LED for strong signal detection
+
 // I2C & Serial
 I2C i2c(PB_11, PB_10);     // I2C2: SDA = PB11, SCL = PB10
 BufferedSerial pc(USBTX, USBRX, 115200);
@@ -132,18 +134,32 @@ void analyze_motion(const float* magnitudes, int sample_size, float sampling_rat
 
     // Thresholds (tunable based on real-world tests)
     float tremor_threshold = 14.0f;
-    float dyskinesia_threshold = 15.0f;
+    float dyskinesia_threshold = 20.0f;
+    float peak_threshold = 100.0f;
     int tremor_count = 0;
     int dyskinesia_count = 0;
+
+    float peak_amplitude_tremor = 0.0f;      // Peak amplitude in Tremor range
+    float peak_amplitude_dyskinesia = 0.0f;  // Peak amplitude in Dyskinesia range
 
     for (int i = 1; i < sample_size / 2; i++) {
         float freq = i * frequency_resolution;
         float amp = magnitudes[i];
 
-        if (freq >= 3.0f && freq <= 5.0f && amp >= tremor_threshold) {   // 3-5 Hz
-            tremor_count++;
-        } else if (freq > 5.0f && freq <= 7.0f && amp >= dyskinesia_threshold) {    // 5-7 Hz
-            dyskinesia_count++;
+        if (freq >= 3.0f && freq <= 5.0f) {   // 3-5 Hz
+            if (amp >= tremor_threshold) {
+                tremor_count++;
+            }
+            if (amp > peak_amplitude_tremor) {
+                peak_amplitude_tremor = amp;
+            }
+        } else if (freq > 5.0f && freq <= 7.0f) {    // 5-7 Hz
+            if (amp > peak_amplitude_dyskinesia) {
+                peak_amplitude_dyskinesia = amp;
+            }
+            if (amp >= dyskinesia_threshold) {
+                dyskinesia_count++;
+            }
         }
     }
 
@@ -159,7 +175,13 @@ void analyze_motion(const float* magnitudes, int sample_size, float sampling_rat
         // printf("No abnormal motion detected\n");
         led_tremor = 0; // Turn off tremor LED
         led_dyskinesia = 0; // Turn off dyskinesia LED
-        
+        led_strong = 0; // Turn off extra LED
+    }
+
+    if (peak_amplitude_tremor >= peak_threshold || peak_amplitude_dyskinesia >= peak_threshold) {
+        led_strong = 1; // Turn on extra LED
+    } else {
+        led_strong = 0; // Turn off extra LED
     }
 }
 
