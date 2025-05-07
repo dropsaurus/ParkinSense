@@ -135,7 +135,7 @@ void analyze_motion(const float* magnitudes, int sample_size, float sampling_rat
     // Thresholds (tunable based on real-world tests)
     float tremor_threshold = 14.0f;
     float dyskinesia_threshold = 20.0f;
-    float peak_threshold = 100.0f;
+    float peak_threshold = 80.0f;
     int tremor_count = 0;
     int dyskinesia_count = 0;
 
