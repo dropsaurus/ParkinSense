@@ -175,13 +175,13 @@ void analyze_motion(const float* magnitudes, int sample_size, float sampling_rat
         // printf("No abnormal motion detected\n");
         led_tremor = 0; // Turn off tremor LED
         led_dyskinesia = 0; // Turn off dyskinesia LED
-        led_strong = 0; // Turn off extra LED
+        led_strong = 0; // Turn led for strong signal off
     }
 
     if (peak_amplitude_tremor >= peak_threshold || peak_amplitude_dyskinesia >= peak_threshold) {
-        led_strong = 1; // Turn on extra LED
+        led_strong = 1; // Turn on strong signal LED
     } else {
-        led_strong = 0; // Turn off extra LED
+        led_strong = 0; // Turn off strong signal LED
     }
 }
 
