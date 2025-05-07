@@ -153,7 +153,7 @@ void analyze_motion(const float* magnitudes, int sample_size, float sampling_rat
         led_dyskinesia = 0; // Turn off dyskinesia LED
     } else if (dyskinesia_count >= 3) {
         // printf("Dyskinesia Detected\n");
-        led_dyskinesia = 1;
+        led_tremor = 1;
         led_dyskinesia = 1; 
     } else {
         // printf("No abnormal motion detected\n");
