@@ -58,14 +58,9 @@ This project aims to detect and classify abnormal hand movements in Parkinson’
 - The detection process is repeated continuously, with a short delay of **10 ms** between iterations to maintain real-time responsiveness.
 - The system operates entirely on the embedded platform, with no reliance on external hardware or serial output for condition indication.
 
-## 🎯 Grading Criteria
-| Category                          | Weight |
-|-----------------------------------|--------|
-| Tremor detection                  | 25%    |
-| Dyskinesia detection              | 25%    |
-| Intensity quantification          | 10%    |
-| Robustness (video demonstration)  | 10%    |
-| Ease of use                       | 10%    |
-| Creativity of indication method   | 10%    |
-| Code quality                      | 5%     |
-| System complexity                 | 5%     |
+### 7. **Team Members**
+- Abby Zhang
+- Moulik Shah
+- Neil Noronha
+- Mike Zeng
+- Dongting
