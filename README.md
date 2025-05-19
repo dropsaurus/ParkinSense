@@ -1,5 +1,4 @@
 # Shake, Rattle, and Roll  
-**Embedded Challenge Spring 2025 - Term Project**
 
 ## 🧠 Objective
 This project aims to detect and classify abnormal hand movements in Parkinson’s patients using data collected from the onboard accelerometer/gyroscope. The primary goals are:
