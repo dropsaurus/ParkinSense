@@ -1,4 +1,4 @@
-# Shake, Rattle, and Roll  
+# ParkinSense 
 
 ## 🧠 Objective
 This project aims to detect and classify abnormal hand movements in Parkinson’s patients using data collected from the onboard accelerometer/gyroscope. The primary goals are:
